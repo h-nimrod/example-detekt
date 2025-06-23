@@ -37,12 +37,12 @@ jobs:
           java-version: '17'
 
       - name: Gradle をセットアップ
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/gradle-build-action@v3
         with:
           gradle-home-cache-cleanup: true
 
       - name: Gradle 依存関係をキャッシュ
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -56,7 +56,7 @@ jobs:
 
       - name: Detekt レポートをアップロード (失敗時)
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: detekt-reports
           path: |
