@@ -63,6 +63,10 @@ detekt {
     config.setFrom(file("../detekt.yml"))
     baseline = file("detekt-baseline.xml")
     autoCorrect = true
+}
+
+// タスクレベルでレポート設定を行う（新しいAPI）
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
     reports {
         html.required.set(true)
         xml.required.set(true)
