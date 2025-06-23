@@ -1,0 +1,120 @@
+name: Detekt 静的解析
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - '**/*.kt'
+      - '**/*.kts'
+      - 'detekt.yml'
+      - '**/build.gradle.kts'
+      - 'gradle/libs.versions.toml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detekt:
+    name: Detekt 静的解析
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Java 17 をセットアップ
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Gradle をセットアップ
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Gradle 依存関係をキャッシュ
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Detekt 静的解析を実行
+        run: ./gradlew detekt --continue
+
+      - name: Detekt レポートをアップロード (失敗時)
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: detekt-reports
+          path: |
+            **/build/reports/detekt/
+          retention-days: 7
+
+      - name: Detekt SARIF レポートをアップロード
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: app/build/reports/detekt/detekt.sarif
+        continue-on-error: true
+
+      - name: Detekt結果をPRコメントに投稿
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Detekt レポートファイルのパス
+            const reportPath = 'app/build/reports/detekt/detekt.md';
+            
+            if (fs.existsSync(reportPath)) {
+              const report = fs.readFileSync(reportPath, 'utf8');
+              
+              // 既存のDetektコメントを削除
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              
+              for (const comment of comments.data) {
+                if (comment.body.includes('🔍 Detekt 静的解析結果')) {
+                  await github.rest.issues.deleteComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: comment.id,
+                  });
+                }
+              }
+              
+              // 新しいコメントを投稿
+              const body = `## 🔍 Detekt 静的解析結果
+
+            ${report}
+            
+            ---
+            *このコメントは自動生成されました*`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            } else {
+              console.log('Detekt レポートファイルが見つかりませんでした');
+            } 
