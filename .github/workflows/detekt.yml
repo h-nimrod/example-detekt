@@ -23,6 +23,8 @@ jobs:
       contents: read
       security-events: write
       actions: read
+      issues: write
+      pull-requests: write
 
     steps:
       - name: リポジトリをチェックアウト
